@@ -47,6 +47,8 @@ def find_chunk_boundaries(file: BinaryIO,desired_num_chunks: int,split_special_t
     return sorted(set(chunk_boundaries))
 
 def split_on_special_tokens(text: str, special_tokens: list[str]) -> list[str]:
+    if not special_tokens:
+        return [text]
     # 第一步:把每個 special token 都用 re.escape 處理過,存進一個新 list
     escaped_tokens = []
     for token in special_tokens:
