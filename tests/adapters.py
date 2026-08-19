@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
 from cs336_basics.model import Linear
+from cs336_basics.model import Embedding
 
 
 def run_linear(
@@ -50,7 +51,10 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
+    layer=Embedding(vocab_size,d_model)
+    layer.load_state_dict({"weight":weights})
+    output=layer(token_ids)
+    return output
     raise NotImplementedError
 
 
