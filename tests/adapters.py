@@ -4,10 +4,7 @@ import os
 from collections.abc import Iterable
 from typing import IO, Any, BinaryIO
 
-import numpy.typing as npt
-import torch
-from jaxtyping import Bool, Float, Int
-from torch import Tensor
+from cs336_basics.model import Linear
 
 
 def run_linear(
@@ -28,7 +25,10 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
-
+    layer=Linear(d_in,d_out)
+    layer.load_state_dict({"weight": weights})   # 把 handout 給的權重載入
+    output = layer(in_features)# TODO: 怎麼呼叫這個 layer,把 in_features 丟進去做運算?
+    return output
     raise NotImplementedError
 
 
