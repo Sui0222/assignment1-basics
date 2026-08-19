@@ -6,6 +6,7 @@ from typing import IO, Any, BinaryIO
 
 from cs336_basics.model import Linear
 from cs336_basics.model import Embedding
+from cs336_basics.model import RMSNorm
 
 
 def run_linear(
@@ -382,6 +383,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
+    layer=RMSNorm(d_model,eps)
+    layer.load_state_dict({"weight": weights})
+    output=layer(in_features)
+    return output
     raise NotImplementedError
 
 
