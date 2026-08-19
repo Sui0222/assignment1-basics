@@ -43,3 +43,22 @@ class RMSNorm(nn.Module):
         # TODO 2: 用 x 除以 rms,再乘上 self.weight,得到最終結果
         result = x/rms*self.weight
         return result.to(in_dtype)
+
+class  SwiGLU(nn.Module):
+    def __init__(self,d_model:int,d_ff:int):
+        super().__init__()
+        self.w1 = Linear(d_model, d_ff)
+        self.w2 = Linear(d_ff, d_model)
+        self.w3 = Linear(d_model, d_ff)
+
+    def forward(self,x: torch.Tensor) -> torch.Tensor:
+        W1x=self.w1(x)
+        W3x=self.w3(x)
+        #逐元素相乘(提示:Python 的 * 運算子,對兩個形狀相同的 tensor,就是做逐元素相乘,不是矩陣乘法——矩陣乘法要用 @)
+        result=self.w2(self.silu(W1x)*W3x)
+        return result
+
+    def silu(self,x): 
+        #在 Python 裡,class 裡定義的每一個方法(除非你特別標記成 @staticmethod),第一個參數必須是 self,代表
+        # 「呼叫這個方法的物件本身」
+        return x * torch.sigmoid(x)

@@ -7,6 +7,7 @@ from typing import IO, Any, BinaryIO
 from cs336_basics.model import Linear
 from cs336_basics.model import Embedding
 from cs336_basics.model import RMSNorm
+from cs336_basics.model import SwiGLU
 
 
 def run_linear(
@@ -88,6 +89,13 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
+    swiglu=SwiGLU(d_model,d_ff)
+    # swiglu.w1.weight.data = w1_weight
+    # swiglu.w2.weight.data = w2_weight
+    # swiglu.w3.weight.data = w3_weight
+    swiglu.load_state_dict({"w1.weight":w1_weight,"w2.weight":w2_weight,"w3.weight":w3_weight})
+    output=swiglu(in_features)
+    return output
     raise NotImplementedError
 
 
