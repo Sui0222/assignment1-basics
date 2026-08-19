@@ -205,3 +205,11 @@ def apply_merge_incremental(
                 pair_index[p].add(new_symbols)
 
     return counts, pair_counts, pair_index
+
+import pickle
+
+def save_tokenizer(vocab, merges, vocab_path, merges_path):
+    with open(vocab_path, "wb") as f:
+        pickle.dump(vocab, f)
+    with open(merges_path, "wb") as f:
+        pickle.dump(merges, f)
