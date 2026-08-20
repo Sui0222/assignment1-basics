@@ -62,3 +62,24 @@ class  SwiGLU(nn.Module):
         #在 Python 裡,class 裡定義的每一個方法(除非你特別標記成 @staticmethod),第一個參數必須是 self,代表
         # 「呼叫這個方法的物件本身」
         return x * torch.sigmoid(x)
+
+class RoPE(nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device=None):
+        super().__init__()
+        i = torch.arange(0, d_k // 2)   # 產生 0, 1, 2, ..., d_k/2 - 1
+        freq = theta **(-2*i/d_k)       # TODO: 想一下這裡的指數該怎麼寫,對應 -2i/d_k
+        poisions=torch.arange(0,max_seq_len)
+        angles=torch.outer(poisions,freq)
+        cos_table = torch.cos(angles)   # 形狀 (max_seq_len, d_k//2)
+        sin_table = torch.sin(angles)   # 形狀 (max_seq_len, d_k//2)
+        self.register_buffer("cos_table", cos_table, persistent=False)
+        self.register_buffer("sin_table", sin_table, persistent=False)
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        x1 = x[..., 0::2]   # 從索引 0 開始,每隔 2 個取一個 → 索引 0, 2, 4, 6, ...
+        x2 = x[..., 1::2]   # 從索引 1 開始,每隔 2 個取一個 → 索引 1, 3, 5, 7, ...
+        x11=x1*self.cos_table[token_positions]-x2*self.sin_table[token_positions]
+        x22=x1*self.sin_table[token_positions]+x2*self.cos_table[token_positions]
+        combined = torch.stack([x11, x22], dim=-1)   # 形狀變成 (..., d_k/2, 2)
+        result = combined.reshape(*x.shape)          # TODO: 攤平回 (..., d_k)
+        return result

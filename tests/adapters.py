@@ -8,6 +8,7 @@ from cs336_basics.model import Linear
 from cs336_basics.model import Embedding
 from cs336_basics.model import RMSNorm
 from cs336_basics.model import SwiGLU
+from cs336_basics.model import RoPE
 
 
 def run_linear(
@@ -213,6 +214,9 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
+    rope=RoPE(theta,d_k,max_seq_len)
+    output=rope(in_query_or_key,token_positions)
+    return output
     raise NotImplementedError
 
 
