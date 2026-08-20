@@ -83,3 +83,12 @@ class RoPE(nn.Module):
         combined = torch.stack([x11, x22], dim=-1)   # 形狀變成 (..., d_k/2, 2)
         result = combined.reshape(*x.shape)          # TODO: 攤平回 (..., d_k)
         return result
+
+
+def softmax(x: torch.Tensor, dim: int) -> torch.Tensor:
+    max_value, _ = x.max(dim=dim, keepdim=True)
+    x = x - max_value
+    x = torch.exp(x)
+    result=x/x.sum(dim=dim,keepdim=True)
+    return result
+
