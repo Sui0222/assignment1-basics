@@ -118,6 +118,9 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
+    from cs336_basics.model import scaled_dot_product_attention
+    output=scaled_dot_product_attention(Q,K,V,mask)
+    return output
     raise NotImplementedError
 
 
