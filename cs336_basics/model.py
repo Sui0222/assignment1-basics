@@ -136,12 +136,16 @@ class MultiheadSelfAttention(nn.Module):
         K=K.transpose(-3, -2)
         V=V.transpose(-3, -2)
 
+        seq_len = x.shape[-2]   # 從輸入 x 取得 seq_len
+
+        if token_positions is None:
+            token_positions = torch.arange(seq_len,device=x.device,)
+
         #RoPE 要解決的問題是:讓 Attention 的關聯性分數(Q 和 K 的點積),能夠反映「相對位置」
         if self.rope is not None:
             Q = self.rope(Q, token_positions)   # ✓ 對已經處理好的 Q 做旋轉
             K = self.rope(K,token_positions)
 
-        seq_len = x.shape[-2]   # 從輸入 x 取得 seq_len
         mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
         attn_output = scaled_dot_product_attention(Q, K, V, mask)
         #把 (..., num_heads, seq_len, d_k),轉換回 (..., seq_len, d_model)
@@ -152,3 +156,20 @@ class MultiheadSelfAttention(nn.Module):
         output=self.o_proj(output)
         return output
 
+
+class TransformerBlock(nn.Module):
+    def __init__(self,d_model: int,num_heads: int,d_ff: int,max_seq_len: int,theta: float,):
+        # __init__：我要用什么东西？
+        super().__init__()
+        #Block的目标是--input--→ RMSNorm → Multi-head self-attention → RMSNorm → SwiGLU--output
+        self.ln1=RMSNorm(d_model)
+        self.attn=MultiheadSelfAttention(d_model,num_heads,max_seq_len,theta)
+        self.ln2=RMSNorm(d_model)
+        self.ffn=SwiGLU(d_model,d_ff)
+
+    def forward(self,x: torch.Tensor)-> torch.Tensor:
+        #forward：这些东西怎么计算？
+        #𝑦 = 𝑥 + MultiHeadSelfAttention(RMSNorm(𝑥)).
+        y=x+self.attn(self.ln1(x))
+        output=y+self.ffn(self.ln2(y))
+        return output
