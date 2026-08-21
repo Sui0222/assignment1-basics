@@ -9,7 +9,7 @@ from cs336_basics.model import Embedding
 from cs336_basics.model import RMSNorm
 from cs336_basics.model import SwiGLU
 from cs336_basics.model import RoPE
-
+from cs336_basics.model import MultiheadSelfAttention
 
 def run_linear(
     d_in: int,
@@ -155,6 +155,11 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
+    layer=MultiheadSelfAttention(d_model,num_heads)
+    #載入四組權重
+    layer.load_state_dict({"q_proj.weight":q_proj_weight,"k_proj.weight":k_proj_weight,"v_proj.weight":v_proj_weight,"o_proj.weight":o_proj_weight})
+    output=layer(in_features)
+    return output
     raise NotImplementedError
 
 

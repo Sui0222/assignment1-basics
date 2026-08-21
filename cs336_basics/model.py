@@ -102,5 +102,43 @@ def scaled_dot_product_attention(Q:torch.Tensor,K:torch.Tensor,V:torch.Tensor,ma
     output=attention@V
     return output
 
+class MultiheadSelfAttention(nn.Module):
+    def __init__(self, d_model: int, num_heads: int):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
 
+        self.q_proj = Linear(d_model, d_model)
+        self.k_proj = Linear(d_model, d_model)
+        self.v_proj = Linear(d_model, d_model)
+        self.o_proj = Linear(d_model, d_model)
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # step1 投影出 Q、K、V
+        Q=self.q_proj(x)
+        K=self.k_proj(x)
+        V=self.v_proj(x) # 形狀 (..., seq_len, d_model)
+        # step2 把每個的最後一維,切成 (num_heads, d_k)
+        #Q = Q.reshape(seq_len,num_heads, d_k)
+        d_k = self.d_model // self.num_heads
+        new_shape_q = Q.shape[:-1] + (self.num_heads, d_k)  #Q.shape[:-1](取出「除了最後一維以外的所有維度」
+        Q = Q.reshape(new_shape_q)
+        new_shape_k=K.shape[:-1]+(self.num_heads,d_k)
+        K=K.reshape(new_shape_k)
+        new_shape_v=V.shape[:-1]+(self.num_heads,d_k)
+        V=V.reshape(new_shape_v)
+        #將Q/K/V，當前形狀(..., seq_len, num_heads, d_k)換成(..., num_heads, seq_len, d_k)
+        Q=Q.transpose(-3, -2)
+        K=K.transpose(-3, -2)
+        V=V.transpose(-3, -2)
+        seq_len = x.shape[-2]   # 從輸入 x 取得 seq_len
+        mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
+        attn_output = scaled_dot_product_attention(Q, K, V, mask)
+        #把 (..., num_heads, seq_len, d_k),轉換回 (..., seq_len, d_model)
+        attn_output=attn_output.transpose(-3,-2)
+        attn_output=attn_output.contiguous()
+        new_shape=attn_output.shape[:-2]+(self.d_model,)
+        output=attn_output.reshape(new_shape)
+        output=self.o_proj(output)
+        return output
+        
