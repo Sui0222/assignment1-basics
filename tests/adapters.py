@@ -395,6 +395,20 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
+    # self.token_embedding(用你寫好的 Embedding class)
+    # self.layers(用 nn.ModuleList 包住多個 TransformerBlock)
+    # self.ln_final(用 RMSNorm)
+    # self.lm_head(用 Linear,輸入輸出維度要對)
+    from cs336_basics.model import TransformerLm
+    layer=TransformerLm(vocab_size,context_length,d_model,num_layers,num_heads,d_ff,rope_theta)
+    lm_weights = dict(weights)
+    for i in range(num_layers):
+        lm_weights[f"layers.{i}.attn.o_proj.weight"] = lm_weights.pop(
+            f"layers.{i}.attn.output_proj.weight"
+    )
+    layer.load_state_dict(lm_weights)
+    output=layer(in_indices)
+    return output
     raise NotImplementedError
 
 
