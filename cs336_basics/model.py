@@ -138,6 +138,7 @@ class MultiheadSelfAttention(nn.Module):
 
         seq_len = x.shape[-2]   # 從輸入 x 取得 seq_len
 
+        # 如果外部没有提供 position，就使用 0,1,...,seq_len-1
         if token_positions is None:
             token_positions = torch.arange(seq_len,device=x.device,)
 
@@ -146,7 +147,7 @@ class MultiheadSelfAttention(nn.Module):
             Q = self.rope(Q, token_positions)   # ✓ 對已經處理好的 Q 做旋轉
             K = self.rope(K,token_positions)
 
-        mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
+        mask = torch.tril(torch.ones(seq_len,seq_len,device=x.device,dtype=torch.bool,))
         attn_output = scaled_dot_product_attention(Q, K, V, mask)
         #把 (..., num_heads, seq_len, d_k),轉換回 (..., seq_len, d_model)
         attn_output=attn_output.transpose(-3,-2)
