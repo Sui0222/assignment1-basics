@@ -103,7 +103,7 @@ def scaled_dot_product_attention(Q:torch.Tensor,K:torch.Tensor,V:torch.Tensor,ma
     return output
 
 class MultiheadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int):
+    def __init__(self, d_model: int, num_heads: int,max_seq_len=None,theta=None):
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
@@ -113,7 +113,11 @@ class MultiheadSelfAttention(nn.Module):
         self.v_proj = Linear(d_model, d_model)
         self.o_proj = Linear(d_model, d_model)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        self.rope = None
+        if max_seq_len is not None and theta is not None:
+            self.rope = RoPE(theta, d_model // num_heads, max_seq_len)
+
+    def forward(self, x: torch.Tensor,token_positions=None) -> torch.Tensor:
         # step1 投影出 Q、K、V
         Q=self.q_proj(x)
         K=self.k_proj(x)
@@ -131,6 +135,12 @@ class MultiheadSelfAttention(nn.Module):
         Q=Q.transpose(-3, -2)
         K=K.transpose(-3, -2)
         V=V.transpose(-3, -2)
+
+        #RoPE 要解決的問題是:讓 Attention 的關聯性分數(Q 和 K 的點積),能夠反映「相對位置」
+        if self.rope is not None:
+            Q = self.rope(Q, token_positions)   # ✓ 對已經處理好的 Q 做旋轉
+            K = self.rope(K,token_positions)
+
         seq_len = x.shape[-2]   # 從輸入 x 取得 seq_len
         mask = torch.tril(torch.ones(seq_len, seq_len)).bool()
         attn_output = scaled_dot_product_attention(Q, K, V, mask)
@@ -141,4 +151,4 @@ class MultiheadSelfAttention(nn.Module):
         output=attn_output.reshape(new_shape)
         output=self.o_proj(output)
         return output
-        
+
