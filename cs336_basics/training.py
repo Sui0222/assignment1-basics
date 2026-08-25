@@ -113,3 +113,20 @@ def get_lr_cosine_schedule(it: int,max_learning_rate: float,min_learning_rate: f
     else:
         alpha_t=min_learning_rate
     return alpha_t
+
+def gradient_clipping(parameters, max_l2_norm):
+
+    total = 0.0
+    eps = 1e-6
+    for p in parameters:
+        if p.grad is None:
+            continue
+        total += (p.grad ** 2).sum()
+    total_norm = total.sqrt()
+
+    if total_norm>=max_l2_norm:
+        scale=max_l2_norm/(total_norm+eps)
+        for p in parameters:
+            if p.grad is None:
+                continue
+            p.grad*=scale
