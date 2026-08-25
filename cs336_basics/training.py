@@ -130,3 +130,32 @@ def gradient_clipping(parameters, max_l2_norm):
             if p.grad is None:
                 continue
             p.grad*=scale
+
+import numpy as np
+def get_batch(x, batch_size, context_length, device):
+    # 隨機選 batch_size 個合法的起始位置
+    starts = np.random.randint(0,len(x) - context_length,size=batch_size,)
+
+    inputs = np.stack([x[i : i + context_length]for i in starts])
+
+    targets = np.stack([
+        x[i + 1 : i + context_length + 1]for i in starts])
+
+    inputs = torch.from_numpy(inputs).to(device)
+    targets = torch.from_numpy(targets).to(device)
+
+    return inputs, targets
+
+def save_checkpoint(model, optimizer, iteration, out):
+    checkpoint = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "iteration": iteration,
+    }
+    torch.save(checkpoint, out)
+
+def load_checkpoint(src, model, optimizer):
+    checkpoint=torch.load(src)
+    model.load_state_dict(checkpoint["model"])
+    optimizer.load_state_dict(checkpoint["optimizer"])
+    return checkpoint["iteration"]
