@@ -88,27 +88,28 @@ class AdamW(torch.optim.Optimizer):
                 m=beta1*m+(1-beta1)*grad
                 v=beta2*v+(1-beta2)*(grad**2)
                 p.data-=a_t*m/((v**0.5)+eps)
-                # # Update first moment
-                # m = beta1*m+(1-beta1)*grad
-                # # Update second moment
-                # v = beta2*v+(1-beta2)*(grad**2)
-                # # Increment timestep
-                # t += 1
-                # # Bias correction
-                # m_hat = m/(1-(beta1**t))
-                # v_hat = v/(1-(beta2**t))
-                # # Adam update
-                # update = lr*(m_hat/((v_hat)**0.5+eps))
-                # p.data -= update
-                # # Decoupled weight decay
-                # p.data *= (1-lr*weight_decay)
-                # Save state
                 state["t"] = t
                 state["m"] = m
                 state["v"] = v
 
         return loss
 
-
-def get_adamw_cls():
-    return AdamW
+def get_lr_cosine_schedule(it: int,max_learning_rate: float,min_learning_rate: float,warmup_iters: int,cosine_cycle_iters: int,)->float:
+    """
+    it (int): Iteration number to get learning rate for.
+    max_learning_rate (float): alpha_max, the maximum learning rate for
+                cosine learning rate schedule (with warmup).
+    min_learning_rate (float): alpha_min, the minimum / final learning rate for
+                the cosine learning rate schedule (with warmup).
+    warmup_iters (int): T_w, the number of iterations to linearly warm-up
+                the learning rate.
+    cosine_cycle_iters (int): T_c, the number of cosine annealing iterations.
+    """
+    alpha_t=0
+    if it<warmup_iters:
+        alpha_t=it/warmup_iters*max_learning_rate
+    elif it>=warmup_iters and it <=cosine_cycle_iters:
+        alpha_t=min_learning_rate+0.5*(1+math.cos(((it-warmup_iters)/(cosine_cycle_iters-warmup_iters))*math.pi))*(max_learning_rate-min_learning_rate)
+    else:
+        alpha_t=min_learning_rate
+    return alpha_t
