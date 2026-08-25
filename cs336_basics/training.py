@@ -82,21 +82,26 @@ class AdamW(torch.optim.Optimizer):
                 t = state["t"]
                 m = state["m"]
                 v = state["v"]
-
-                # Update first moment
-                m = beta1*m+(1-beta1)*grad
-                # Update second moment
-                v = beta2*v+(1-beta2)*(grad**2)
-                # Increment timestep
-                t += 1
-                # Bias correction
-                m_hat = m/(1-(beta1**t))
-                v_hat = v/(1-(beta2**t))
-                # Adam update
-                update = lr*(m_hat/((v_hat)**0.5+eps))
-                p.data -= update
-                # Decoupled weight decay
-                p.data *= (1-lr*weight_decay)
+                t+=1
+                a_t=lr*((1-beta2**t)**0.5/(1-beta1**t))
+                p.data-=lr*weight_decay*p.data
+                m=beta1*m+(1-beta1)*grad
+                v=beta2*v+(1-beta2)*(grad**2)
+                p.data-=a_t*m/((v**0.5)+eps)
+                # # Update first moment
+                # m = beta1*m+(1-beta1)*grad
+                # # Update second moment
+                # v = beta2*v+(1-beta2)*(grad**2)
+                # # Increment timestep
+                # t += 1
+                # # Bias correction
+                # m_hat = m/(1-(beta1**t))
+                # v_hat = v/(1-(beta2**t))
+                # # Adam update
+                # update = lr*(m_hat/((v_hat)**0.5+eps))
+                # p.data -= update
+                # # Decoupled weight decay
+                # p.data *= (1-lr*weight_decay)
                 # Save state
                 state["t"] = t
                 state["m"] = m
