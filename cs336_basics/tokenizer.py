@@ -10,6 +10,7 @@ class Tokenizer:
         self.special_tokens = special_tokens
         self.vocab_reverse = {}
         self.merge_priority={}
+        self.cache = {}   
         for token_id, token_bytes in vocab.items():
             # TODO: 把這一組資料,反過來存進 self.vocab_reverse
             self.vocab_reverse[token_bytes] = token_id
@@ -41,17 +42,17 @@ class Tokenizer:
                 pieces = re.findall(PAT, segment)
                 for piece in pieces:
                     piece_bytes = piece.encode("utf-8")
-                    symbols = tuple(bytes([b]) for b in piece_bytes)
 
-                    # TODO ②: 呼叫 encode_symbols,套用合併規則
-                    merged_symbols =encode_symbols(symbols,self.merge_priority)
+                    if piece_bytes in self.cache:
+                        merged_symbols = self.cache[piece_bytes]
+                    else:
+                        symbols = tuple(bytes([b]) for b in piece_bytes)
+                        merged_symbols = encode_symbols(symbols, self.merge_priority)
+                        self.cache[piece_bytes] = merged_symbols
 
-                    # TODO ③: 把 merged_symbols 裡每一個 symbol,查 vocab_reverse 轉成 id,加進 ids
                     for symbol in merged_symbols:
-                        id=self.vocab_reverse.get(symbol)
+                        id = self.vocab_reverse.get(symbol)
                         ids.append(id)
-                    
-
         return ids
 
     def encode_iterable(self, iterable):
