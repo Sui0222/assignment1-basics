@@ -159,3 +159,76 @@ def load_checkpoint(src, model, optimizer):
     model.load_state_dict(checkpoint["model"])
     optimizer.load_state_dict(checkpoint["optimizer"])
     return checkpoint["iteration"]
+
+import os
+
+def train(model, train_data, optimizer, batch_size, context_length, max_iters, device,
+          max_l2_norm, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters,
+          checkpoint_path=None, checkpoint_every=100):
+
+    model.to(device)
+    model.train()
+
+    # 有 checkpoint 就接著練,沒有就從 0 開始
+    start_it = 0
+    if checkpoint_path is not None and os.path.exists(checkpoint_path):
+        start_it = load_checkpoint(checkpoint_path, model, optimizer)
+
+    for it in range(start_it, max_iters):
+        # 1. 學習率排程
+        lr = get_lr_cosine_schedule(it, max_learning_rate, min_learning_rate,
+                                    warmup_iters, cosine_cycle_iters)
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = lr
+
+        # 2~4. 清梯度 → 取 batch → forward → loss → backward
+        optimizer.zero_grad()
+        inputs, targets = get_batch(train_data, batch_size, context_length, device)
+        logits = model(inputs)
+        logits = logits.reshape(-1, logits.shape[-1])
+        targets = targets.reshape(-1)
+        loss = cross_entropy_loss(logits, targets)
+        loss.backward()
+
+        # 5~6. 裁梯度 → 更新
+        gradient_clipping(model.parameters(), max_l2_norm)
+        optimizer.step()
+
+        # 定期存檔
+        if checkpoint_path is not None and it % checkpoint_every == 0:
+            save_checkpoint(model, optimizer, it + 1, checkpoint_path)
+
+        if it % 10 == 0:
+            print(f"Iteration {it} | LR: {lr:.6f} | Loss: {loss.item():.4f}")
+
+    # 訓練結束後補存最後一次
+    if checkpoint_path is not None:
+        save_checkpoint(model, optimizer, max_iters, checkpoint_path)
+
+
+if __name__ == "__main__":
+    import numpy as np
+    from cs336_basics.model import TransformerLm
+
+    vocab_size = 100
+    context_length = 16
+    d_model = 32
+    num_layers = 2
+    num_heads = 4
+    d_ff = 64
+    rope_theta = 10000.0
+    checkpoint_path="/tmp/ckpt.pt"
+
+    model = TransformerLm(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
+    pattern = [1, 2, 3, 4]
+    train_data = np.array(pattern * 2500)   # 重複 2500 次，總長度 10000，跟之前一樣
+    optimizer = AdamW(model.parameters(), lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01)
+
+    train(
+        model, train_data, optimizer,
+        batch_size=4, context_length=context_length, max_iters=200,
+        device="cpu", max_l2_norm=1.0,
+        max_learning_rate=1e-3, min_learning_rate=1e-4,
+        warmup_iters=20, cosine_cycle_iters=200,
+        checkpoint_path="/tmp/ckpt.pt"
+    )
