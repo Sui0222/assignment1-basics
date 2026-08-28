@@ -141,8 +141,8 @@ def get_batch(x, batch_size, context_length, device):
     targets = np.stack([
         x[i + 1 : i + context_length + 1]for i in starts])
 
-    inputs = torch.from_numpy(inputs).to(device)
-    targets = torch.from_numpy(targets).to(device)
+    inputs = torch.from_numpy(inputs.astype(np.int64)).to(device)
+    targets = torch.from_numpy(targets.astype(np.int64)).to(device)
 
     return inputs, targets
 
@@ -162,10 +162,29 @@ def load_checkpoint(src, model, optimizer):
 
 import os
 
-def train(model, train_data, optimizer, batch_size, context_length, max_iters, device,
-          max_l2_norm, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters,
-          checkpoint_path=None, checkpoint_every=100):
+def evaluate(model, valid_data, batch_size, context_length, device, num_batches):
+    model.eval()
+    total_loss = 0.0
 
+    with torch.no_grad():
+        for _ in range(num_batches):
+            inputs, targets = get_batch(valid_data, batch_size, context_length, device)   # 1. 拿一批 validation 資料
+            logits = model(inputs)                                                          # 2. 模型做預測(forward)
+            logits = logits.reshape(-1, logits.shape[-1])                                    # 3. 攤平成 2 維
+            targets = targets.reshape(-1)                                                     # 4. targets 也攤平
+            loss = cross_entropy_loss(logits, targets)                                        # 5. 算這一批的 loss
+            total_loss += loss.item()                                                          # 6. 累加起來
+
+    model.train()
+    return total_loss / num_batches   # 7. 算平均，得到最終的 validation loss
+
+def train(model, train_data, valid_data, optimizer, batch_size, context_length, max_iters, device,
+          max_l2_norm, max_learning_rate, min_learning_rate, warmup_iters, cosine_cycle_iters,
+          checkpoint_path=None, checkpoint_every=100, log_path=None, eval_every=500, eval_batches=20):
+
+    import time
+    import csv
+    print(device)
     model.to(device)
     model.train()
 
@@ -174,8 +193,18 @@ def train(model, train_data, optimizer, batch_size, context_length, max_iters, d
     if checkpoint_path is not None and os.path.exists(checkpoint_path):
         start_it = load_checkpoint(checkpoint_path, model, optimizer)
 
+    start_time=time.time()
+
+     # TODO 2: 如果 log_path 有給，開啟這個檔案準備寫入，並寫入表頭
+    log_file = None
+    log_writer = None   
+    if log_path is not None:
+        log_file = open(log_path, "w", newline="")
+        log_writer = csv.writer(log_file)
+        log_writer.writerow(["step", "time", "loss", "lr"])
+
     for it in range(start_it, max_iters):
-        # 1. 學習率排程
+ # 1. 學習率排程
         lr = get_lr_cosine_schedule(it, max_learning_rate, min_learning_rate,
                                     warmup_iters, cosine_cycle_iters)
         for param_group in optimizer.param_groups:
@@ -188,6 +217,11 @@ def train(model, train_data, optimizer, batch_size, context_length, max_iters, d
         logits = logits.reshape(-1, logits.shape[-1])
         targets = targets.reshape(-1)
         loss = cross_entropy_loss(logits, targets)
+
+        if log_writer is not None:
+            elapsed = time.time() - start_time
+            log_writer.writerow([it, elapsed, loss.item(), lr])
+
         loss.backward()
 
         # 5~6. 裁梯度 → 更新
@@ -197,38 +231,105 @@ def train(model, train_data, optimizer, batch_size, context_length, max_iters, d
         # 定期存檔
         if checkpoint_path is not None and it % checkpoint_every == 0:
             save_checkpoint(model, optimizer, it + 1, checkpoint_path)
-
-        if it % 10 == 0:
-            print(f"Iteration {it} | LR: {lr:.6f} | Loss: {loss.item():.4f}")
+        # TODO: 每隔 eval_every 步，呼叫 evaluate，把結果印出來（也可以考慮寫進 log）
+        
+        if it % eval_every == 0:
+            val_loss = evaluate(model, valid_data, batch_size, context_length, device, eval_batches)
+            print(f"Iteration {it} | Validation Loss: {val_loss:.4f}")
 
     # 訓練結束後補存最後一次
     if checkpoint_path is not None:
         save_checkpoint(model, optimizer, max_iters, checkpoint_path)
 
+    if log_file is not None:
+        log_file.close()
+
+
+import numpy as np
+import torch
+from cs336_basics.model import TransformerLm
+from cs336_basics.training import AdamW, train
+
 
 if __name__ == "__main__":
-    import numpy as np
-    from cs336_basics.model import TransformerLm
+    train_data = np.load("data/tinystories_train.npy", mmap_mode="r")
+    valid_data = np.load("data/tinystories_valid.npy", mmap_mode="r")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    vocab_size = 100
-    context_length = 16
-    d_model = 32
-    num_layers = 2
-    num_heads = 4
-    d_ff = 64
-    rope_theta = 10000.0
-    checkpoint_path="/tmp/ckpt.pt"
+    base_batch_size = 32
+    base_lr = 1e-3
 
-    model = TransformerLm(vocab_size, context_length, d_model, num_layers, num_heads, d_ff, rope_theta)
-    pattern = [1, 2, 3, 4]
-    train_data = np.array(pattern * 2500)   # 重複 2500 次，總長度 10000，跟之前一樣
-    optimizer = AdamW(model.parameters(), lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01)
+    batch_sizes = [1, 4, 16, 32, 64, 128]
 
-    train(
-        model, train_data, optimizer,
-        batch_size=4, context_length=context_length, max_iters=200,
-        device="cpu", max_l2_norm=1.0,
-        max_learning_rate=1e-3, min_learning_rate=1e-4,
-        warmup_iters=20, cosine_cycle_iters=200,
-        checkpoint_path="/tmp/ckpt.pt"
-    )
+    for bs in batch_sizes:
+        lr = base_lr * (bs / base_batch_size)
+
+        print(f"=== 開始訓練 batch_size={bs}, lr={lr:.6f} ===")
+
+        model = TransformerLm(
+            vocab_size=10000, context_length=256, d_model=512,
+            num_layers=4, num_heads=16, d_ff=1344, rope_theta=10000.0,
+        )
+
+        optimizer = AdamW(model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01)
+
+        # train(
+        #     model, train_data, valid_data, optimizer,
+        #     batch_size=bs, context_length=256, max_iters=1000,
+        #     device=device, max_l2_norm=1.0,
+        #     max_learning_rate=lr, min_learning_rate=lr * 0.1,
+        #     warmup_iters=50, cosine_cycle_iters=1000,
+        #     checkpoint_path=None,
+        #     log_path=f"logs/batch_size_{bs}.csv",
+        #     eval_every=200,
+        #     eval_batches=10,
+        # )
+        
+        import csv
+    import matplotlib.pyplot as plt
+
+    batch_sizes = [1, 4, 16, 32, 64, 128]
+
+    # ---- 圖 1: Training Loss(從 CSV 讀取)----
+    plt.figure(figsize=(10, 6))
+    for bs in batch_sizes:
+        steps = []
+        losses = []
+        with open(f"logs/batch_size_{bs}.csv", "r") as f:
+            reader = csv.reader(f)
+            next(reader)   # 跳過表頭
+            for row in reader:
+                steps.append(int(row[0]))
+                losses.append(float(row[2]))
+        plt.plot(steps, losses, label=f"batch_size={bs}")
+
+    plt.xlabel("Step")
+    plt.ylabel("Training Loss")
+    plt.title("Training Loss Curves for Different Batch Sizes")
+    plt.legend()
+    plt.savefig("logs/batch_size_training_loss.png")
+    plt.show()
+
+    # ---- 圖 2: Validation Loss(用你終端機貼出來的數字)----
+    validation_data = {
+        1:   [(0, 9.2704), (200, 6.2015), (400, 5.3630), (600, 5.1051), (800, 4.9333)],
+        4:   [(0, 9.2759), (200, 4.3963), (400, 3.9741), (600, 3.6324), (800, 3.4448)],
+        16:  [(0, 9.2484), (200, 3.3077), (400, 2.8905), (600, 2.6888), (800, 2.5501)],
+        32:  [(0, 9.2654), (200, 2.9433), (400, 2.5371), (600, 2.3610), (800, 2.2126)],
+        64:  [(0, 9.2286), (200, 2.6333), (400, 2.2435), (600, 2.0334), (800, 1.9290)],
+        128: [(0, 9.2899), (200, 2.5460), (400, 2.2211), (600, 2.0262), (800, 1.9182)],
+    }
+
+    plt.figure(figsize=(10, 6))
+    for bs, points in validation_data.items():
+        steps = [p[0] for p in points]
+        losses = [p[1] for p in points]
+        plt.plot(steps, losses, marker="o", label=f"batch_size={bs}")
+
+    plt.xlabel("Step")
+    plt.ylabel("Validation Loss")
+    plt.title("Validation Loss Curves for Different Batch Sizes")
+    plt.legend()
+    plt.savefig("logs/batch_size_validation_loss.png")
+    plt.show()
+    
